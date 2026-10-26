@@ -1,54 +1,162 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import {
+    getProducts,
+    createOrder,
+    addProductToOrder,
+    getOrders,
+    updateOrderStatus,
+} from './api'
+import TerminalView from './TerminalView'
+import KitchenView from './KitchenView'
+import PickupView from './PickupView'
 import './App.css'
 
-const productos = [
-  { id: 1, nombre: 'Hamburguesa', precio: 8.5 },
-  { id: 2, nombre: 'Patatas fritas', precio: 3 },
-  { id: 3, nombre: 'Refresco', precio: 2.5 },
-  { id: 4, nombre: 'Pizza', precio: 10 }
-]
-
 function App() {
-  const [vista, setVista] = useState('terminal')
-  const [carrito, setCarrito] = useState([])
+  const location = useLocation()
+  const currentView = location.pathname.slice(1) || 'terminal'
+  const [cart, setCart] = useState([])
+  const [products, setProducts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [orderMessage, setOrderMessage] = useState('')
+  const [orders, setOrders] = useState([])
+  const [ordersLoading, setOrdersLoading] = useState(false)
+  const [ordersError, setOrdersError] = useState('')
 
-  function anadirProducto(producto) {
-    setCarrito((carritoActual) => {
-      const productoExistente = carritoActual.find(
-          (item) => item.id === producto.id
+  const loadOrders = useCallback(async (statuses) => {
+    try {
+      setOrdersLoading(true)
+      setOrdersError('')
+
+      const results = await Promise.all(
+          statuses.map((status) => getOrders(status))
       )
 
-      if (productoExistente) {
-        return carritoActual.map((item) =>
-            item.id === producto.id
-                ? { ...item, cantidad: item.cantidad + 1 }
+      setOrders(results.flat())
+    } catch (err) {
+      console.error(err)
+      setOrdersError(
+          err.message || 'No se pudieron cargar los pedidos.'
+      )
+    } finally {
+      setOrdersLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (currentView === 'cocina') {
+      loadOrders(['PENDING', 'IN_PREPARATION'])
+    } else if (currentView === 'recogida') {
+      loadOrders(['COMPLETED'])
+    }
+  }, [currentView, loadOrders])
+
+  async function handleStatusChange(orderId, status) {
+    try {
+      setOrdersError('')
+
+      await updateOrderStatus(orderId, status)
+
+      if (currentView === 'cocina') {
+        await loadOrders(['PENDING', 'IN_PREPARATION'])
+      } else if (currentView === 'recogida') {
+        await loadOrders(['COMPLETED'])
+      }
+    } catch (err) {
+      console.error(err);
+      setOrdersError(err.message || 'No se pudo actualizar el estado del pedido.');
+    }
+  }
+
+  useEffect(() => {
+    async function loadProducts() {
+      try {
+        setLoading(true)
+        const data = await getProducts()
+        setProducts(data)
+        setError('')
+      } catch (err) {
+        console.error(err);
+        setError(err.message || 'No se pudieron cargar los productos.');
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadProducts()
+  }, [])
+
+
+
+  function addProduct(product) {
+    setCart((currentCart) => {
+      const existingProduct = currentCart.find(
+          (item) => item.id === product.id
+      )
+
+      if (existingProduct) {
+        return currentCart.map((item) =>
+            item.id === product.id
+                ? { ...item, quantity: item.quantity + 1 }
                 : item
         )
       }
 
-      return [...carritoActual, { ...producto, cantidad: 1 }]
+      return [...currentCart, { ...product, quantity: 1 }]
     })
   }
 
-  function quitarProducto(id) {
-    setCarrito((carritoActual) =>
-        carritoActual
+
+  function removeProduct(id) {
+    setCart((currentCart) =>
+        currentCart
             .map((item) =>
                 item.id === id
-                    ? { ...item, cantidad: item.cantidad - 1 }
+                    ? { ...item, quantity: item.quantity - 1 }
                     : item
             )
-            .filter((item) => item.cantidad > 0)
+            .filter((item) => item.quantity > 0)
     )
   }
 
-  const total = carrito.reduce(
-      (suma, item) => suma + item.precio * item.cantidad,
+  async function submitOrder() {
+    if (cart.length === 0 || submitting) {
+      return
+    }
+
+    try {
+      setSubmitting(true)
+      setOrderMessage('')
+
+      const order = await createOrder(total, 1)
+
+      for (const item of cart) {
+        await addProductToOrder(
+            order.id,
+            item.id,
+            item.quantity
+        )
+      }
+
+      setCart([])
+      setOrderMessage(`Pedido ${order.code} creado correctamente.`)
+    } catch (err) {
+      console.error(err);
+      setOrderMessage(err.message || 'No se pudo completar el pedido.');
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+
+
+  const total = cart.reduce(
+      (sum, item) => sum + item.price * item.quantity,
       0
   )
+
 
   return (
       <main>
@@ -58,78 +166,47 @@ function App() {
         </header>
 
         <nav aria-label="Vistas de la aplicación">
-          <button type="button" onClick={() => setVista('terminal')}>
-            Terminal
-          </button>
-          <button type="button" onClick={() => setVista('cocina')}>
-            Cocina
-          </button>
-          <button type="button" onClick={() => setVista('recogida')}>
-            Recogida
-          </button>
+          <Link to="/terminal">Terminal</Link>
+          <Link to="/cocina">Cocina</Link>
+          <Link to="/recogida">Recogida</Link>
         </nav>
 
-        {vista === 'terminal' && (
-            <section>
-              <h2>Terminal de pedidos</h2>
-
-              <h3>Carta</h3>
-
-              {productos.map((producto) => (
-                  <article key={producto.id}>
-              <span>
-                {producto.nombre} — {producto.precio.toFixed(2)} €
-              </span>
-                    <button
-                        type="button"
-                        onClick={() => anadirProducto(producto)}
-                    >
-                      Añadir
-                    </button>
-                  </article>
-              ))}
-
-              <h3>Pedido actual</h3>
-
-              {carrito.length === 0 ? (
-                  <p>Aún no has añadido productos.</p>
-              ) : (
-                  carrito.map((item) => (
-                      <article key={item.id}>
-                <span>
-                  {item.nombre} × {item.cantidad}
-                  {' — '}
-                  {(item.precio * item.cantidad).toFixed(2)} €
-                </span>
-                        <button
-                            type="button"
-                            onClick={() => quitarProducto(item.id)}
-                        >
-                          Quitar uno
-                        </button>
-                      </article>
-                  ))
-              )}
-
-              <h3>Total: {total.toFixed(2)} €</h3>
-            </section>
+        {currentView === 'terminal' && (
+            <TerminalView
+                products={products}
+                loading={loading}
+                error={error}
+                cart={cart}
+                addProduct={addProduct}
+                removeProduct={removeProduct}
+                total={total}
+                submitOrder={submitOrder}
+                submitting={submitting}
+                orderMessage={orderMessage}
+            />
         )}
 
-        {vista === 'cocina' && (
-            <section>
-              <h2>Vista de Cocina</h2>
-              <p>Aquí mostraremos los pedidos pendientes de preparación.</p>
-            </section>
-        )}
+          {currentView === 'cocina' && (
+              <KitchenView
+                  orders={orders}
+                  ordersLoading={ordersLoading}
+                  ordersError={ordersError}
+                  handleStatusChange={handleStatusChange}
+              />
+          )}
 
-        {vista === 'recogida' && (
-            <section>
-              <h2>Vista de Recogida</h2>
-              <p>Aquí mostraremos los pedidos listos para recoger.</p>
-            </section>
-        )}
+
+          {currentView === 'recogida' && (
+              <PickupView
+                  orders={orders}
+                  ordersLoading={ordersLoading}
+                  ordersError={ordersError}
+              />
+          )}
+
       </main>
   )
 }
 
 export default App
+
