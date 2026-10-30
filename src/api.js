@@ -28,6 +28,20 @@ export async function getProducts() {
     return await response.json();
 }
 
+
+export async function getTerminals() {
+    const response = await fetch(`${API_URL}/terminals`);
+
+    if (!response.ok) {
+        throw new Error(
+            await getErrorMessage(response, 'No se pudieron cargar los terminales')
+        );
+    }
+
+    return await response.json();
+}
+
+
 export async function createOrder(total, terminalId) {
     const response = await fetch(`${API_URL}/orders`, {
         method: 'POST',

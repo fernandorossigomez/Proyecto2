@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import {
     getProducts,
+    getTerminals,
     createOrder,
     addProductToOrder,
     getOrders,
@@ -24,17 +25,22 @@ function App() {
   const [orders, setOrders] = useState([])
   const [ordersLoading, setOrdersLoading] = useState(false)
   const [ordersError, setOrdersError] = useState('')
+  const [updatingOrderId, setUpdatingOrderId] = useState(null)
+  const [terminals, setTerminals] = useState([])
+  const [selectedTerminalId, setSelectedTerminalId] = useState('')
+  const [terminalsLoading, setTerminalsLoading] = useState(true)
+  const [terminalsError, setTerminalsError] = useState('')
 
   const loadOrders = useCallback(async (statuses) => {
-    try {
-      setOrdersLoading(true)
-      setOrdersError('')
+    setOrdersLoading(true)
 
+    try {
       const results = await Promise.all(
           statuses.map((status) => getOrders(status))
       )
 
       setOrders(results.flat())
+      setOrdersError('')
     } catch (err) {
       console.error(err)
       setOrdersError(
@@ -46,15 +52,61 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (currentView === 'cocina') {
-      loadOrders(['PENDING', 'IN_PREPARATION'])
-    } else if (currentView === 'recogida') {
-      loadOrders(['COMPLETED'])
+    let cancelled = false
+
+    async function fetchOrders() {
+      const statuses =
+          currentView === 'cocina'
+              ? ['PENDING', 'IN_PREPARATION']
+              : currentView === 'recogida'
+                  ? ['COMPLETED']
+                  : []
+
+      if (statuses.length === 0) {
+        setOrdersLoading(false)
+        return
+      }
+
+      setOrdersLoading(true)
+
+      try {
+        const results = await Promise.all(
+            statuses.map((status) => getOrders(status))
+        )
+
+        if (!cancelled) {
+          setOrders(results.flat())
+          setOrdersError('')
+        }
+      } catch (err) {
+        console.error(err)
+
+        if (!cancelled) {
+          setOrdersError(
+              err.message || 'No se pudieron cargar los pedidos.'
+          )
+        }
+      } finally {
+        if (!cancelled) {
+          setOrdersLoading(false)
+        }
+      }
     }
-  }, [currentView, loadOrders])
+
+    fetchOrders()
+
+    return () => {
+      cancelled = true
+    }
+  }, [currentView])
 
   async function handleStatusChange(orderId, status) {
+    if (updatingOrderId !== null) {
+      return
+    }
+
     try {
+      setUpdatingOrderId(orderId)
       setOrdersError('')
 
       await updateOrderStatus(orderId, status)
@@ -65,8 +117,12 @@ function App() {
         await loadOrders(['COMPLETED'])
       }
     } catch (err) {
-      console.error(err);
-      setOrdersError(err.message || 'No se pudo actualizar el estado del pedido.');
+      console.error(err)
+      setOrdersError(
+          err.message || 'No se pudo actualizar el estado del pedido.'
+      )
+    } finally {
+      setUpdatingOrderId(null)
     }
   }
 
@@ -86,6 +142,31 @@ function App() {
     }
 
     loadProducts()
+  }, [])
+
+  useEffect(() => {
+    async function loadTerminals() {
+      try {
+        setTerminalsLoading(true)
+        setTerminalsError('')
+
+        const data = await getTerminals()
+        setTerminals(data)
+
+        if (data.length > 0) {
+          setSelectedTerminalId(String(data[0].id))
+        }
+      } catch (err) {
+        console.error(err)
+        setTerminalsError(
+            err.message || 'No se pudieron cargar los terminales.'
+        )
+      } finally {
+        setTerminalsLoading(false)
+      }
+    }
+
+    loadTerminals()
   }, [])
 
 
@@ -121,8 +202,25 @@ function App() {
     )
   }
 
+  function removeProductCompletely(productId) {
+    setCart((currentCart) =>
+        currentCart.filter((item) => item.id !== productId)
+    )
+  }
+
+  function clearCart() {
+    setCart([])
+    setOrderMessage('')
+  }
+
   async function submitOrder() {
-    if (cart.length === 0 || submitting) {
+    if (
+        cart.length === 0 ||
+        submitting ||
+        terminalsLoading ||
+        terminalsError ||
+        !selectedTerminalId
+    ) {
       return
     }
 
@@ -130,7 +228,7 @@ function App() {
       setSubmitting(true)
       setOrderMessage('')
 
-      const order = await createOrder(total, 1)
+      const order = await createOrder(total, Number(selectedTerminalId))
 
       for (const item of cart) {
         await addProductToOrder(
@@ -183,6 +281,13 @@ function App() {
                 submitOrder={submitOrder}
                 submitting={submitting}
                 orderMessage={orderMessage}
+                terminals={terminals}
+                selectedTerminalId={selectedTerminalId}
+                setSelectedTerminalId={setSelectedTerminalId}
+                terminalsLoading={terminalsLoading}
+                terminalsError={terminalsError}
+                removeProductCompletely={removeProductCompletely}
+                clearCart={clearCart}
             />
         )}
 
@@ -192,6 +297,7 @@ function App() {
                   ordersLoading={ordersLoading}
                   ordersError={ordersError}
                   handleStatusChange={handleStatusChange}
+                  updatingOrderId={updatingOrderId}
               />
           )}
 
@@ -201,6 +307,8 @@ function App() {
                   orders={orders}
                   ordersLoading={ordersLoading}
                   ordersError={ordersError}
+                  handleStatusChange={handleStatusChange}
+                  updatingOrderId={updatingOrderId}
               />
           )}
 
