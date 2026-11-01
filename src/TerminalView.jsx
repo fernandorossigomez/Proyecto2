@@ -125,8 +125,9 @@ function TerminalView({
                                         disabled={submitting}
                                         onClick={() => removeProduct(item.id)}
                                         aria-label={`Quitar una unidad de ${item.name}`}
+                                        title="Quitar una unidad"
                                     >
-                                        − Quitar
+                                        −1
                                     </button>
                                     <button
                                         className="remove-button"
@@ -134,8 +135,9 @@ function TerminalView({
                                         disabled={submitting}
                                         onClick={() => removeProductCompletely(item.id)}
                                         aria-label={`Eliminar todas las unidades de ${item.name}`}
+                                        title="Eliminar producto"
                                     >
-                                        Eliminar producto
+                                        <span aria-hidden="true">🗑️</span>
                                     </button>
                                 </div>
                             </article>

@@ -712,11 +712,11 @@ main [role="status"] {
   transition: background 0.2s ease, transform 0.2s ease;
 }
 
-.kitchen-action-button:hover {
+.kitchen-action-button:hover:not(:disabled) {
   background: var(--color-primary-hover);
 }
 
-.kitchen-action-button:active {
+.kitchen-action-button:active:not(:disabled) {
   transform: scale(0.99);
 }
 
@@ -724,7 +724,7 @@ main [role="status"] {
   background: var(--color-accent);
 }
 
-.ready-button:hover {
+.ready-button:hover:not(:disabled) {
   background: var(--color-accent-hover);
 }
 
@@ -885,7 +885,7 @@ main [role="status"] {
   transition: background 0.2s ease;
 }
 
-.cancel-order-button:hover {
+.cancel-order-button:hover:not(:disabled) {
   background: #fbdada;
 }
 
@@ -911,7 +911,7 @@ main [role="status"] {
   font-weight: 700;
 }
 
-.pickup-confirm-button:hover {
+.pickup-confirm-button:hover:not(:disabled) {
   background: var(--color-primary-hover);
 }
 
@@ -932,7 +932,7 @@ main [role="status"] {
   font-weight: 700;
 }
 
-.terminal-layout .clear-cart-button:hover {
+.terminal-layout .clear-cart-button:hover:not(:disabled) {
   color: #ffffff;
   background: var(--color-danger);
 }
